@@ -1,0 +1,615 @@
+# OtakuGuessr — Implementation Plan (Version 1 MVP)
+
+> [!IMPORTANT]
+> This plan must be approved before any code is written. It covers file structure, database schema, component breakdown, API routes, and build order.
+
+---
+
+## 1. Technology Stack
+
+| Layer | Choice | Rationale |
+|---|---|---|
+| Framework | **Next.js 14 (App Router)** | SSR, RSC, API routes, Vercel-native |
+| Language | **TypeScript** | Type safety, DX |
+| Styling | **Tailwind CSS + shadcn/ui** | Fast, modern dark-mode UI |
+| Database | **PostgreSQL via Prisma** | Relational, scalable, type-safe ORM |
+| Auth | **NextAuth.js v5** | Email/password + OAuth (Google, Discord) |
+| Image CDN | **Cloudinary** (abstracted behind a helper) | Easy swap to S3 |
+| Audio | **HTML5 `<audio>`** | Zero deps for MVP |
+| Caching | **Redis (Upstash)** | Rate limiting, daily challenge caching |
+| Deployment | **Vercel + Neon (serverless Postgres)** | Zero-config production |
+| Anime Data | **AniList GraphQL API** (seed script) | Rich, free, well-structured |
+| Search | **PostgreSQL full-text search + trgm** | Fuzzy autocomplete without extra service |
+
+---
+
+## 2. File & Directory Structure
+
+```
+otakuguessr/
+├── prisma/
+│   ├── schema.prisma           # All DB models
+│   └── seed.ts                 # Seed script (AniList API)
+├── public/
+│   ├── fonts/
+│   └── og/                     # Static OG images
+├── src/
+│   ├── app/
+│   │   ├── layout.tsx          # Root layout (dark mode, fonts)
+│   │   ├── page.tsx            # Landing / home (mode selector)
+│   │   ├── (auth)/
+│   │   │   ├── login/page.tsx
+│   │   │   └── register/page.tsx
+│   │   ├── (game)/
+│   │   │   ├── screenshot/
+│   │   │   │   ├── page.tsx    # Daily screenshot mode
+│   │   │   │   └── practice/page.tsx
+│   │   │   ├── character/
+│   │   │   │   ├── page.tsx
+│   │   │   │   └── practice/page.tsx
+│   │   │   ├── opening/
+│   │   │   │   ├── page.tsx
+│   │   │   │   └── practice/page.tsx
+│   │   │   └── anidle/
+│   │   │       ├── page.tsx
+│   │   │       └── practice/page.tsx
+│   │   ├── leaderboard/
+│   │   │   └── page.tsx
+│   │   ├── profile/
+│   │   │   └── [userId]/page.tsx
+│   │   └── api/
+│   │       ├── auth/[...nextauth]/route.ts
+│   │       ├── daily/
+│   │       │   ├── screenshot/route.ts   # GET today's challenge
+│   │       │   ├── character/route.ts
+│   │       │   ├── opening/route.ts
+│   │       │   └── anidle/route.ts
+│   │       ├── game/
+│   │       │   ├── screenshot/submit/route.ts  # POST guess
+│   │       │   ├── character/submit/route.ts
+│   │       │   ├── opening/submit/route.ts
+│   │       │   └── anidle/guess/route.ts
+│   │       ├── search/
+│   │       │   ├── anime/route.ts       # Autocomplete
+│   │       │   └── character/route.ts
+│   │       ├── leaderboard/route.ts
+│   │       ├── streak/route.ts
+│   │       └── share/generate/route.ts  # OG image generation
+│   ├── components/
+│   │   ├── ui/                   # shadcn/ui base components
+│   │   ├── layout/
+│   │   │   ├── Navbar.tsx
+│   │   │   ├── Footer.tsx
+│   │   │   └── ModeSelector.tsx
+│   │   ├── game/
+│   │   │   ├── screenshot/
+│   │   │   │   ├── ScreenshotGame.tsx
+│   │   │   │   └── BlurReveal.tsx      # Progressive unblur
+│   │   │   ├── character/
+│   │   │   │   ├── CharacterGame.tsx
+│   │   │   │   └── SilhouetteReveal.tsx
+│   │   │   ├── opening/
+│   │   │   │   ├── OpeningGame.tsx
+│   │   │   │   └── AudioPlayer.tsx
+│   │   │   └── anidle/
+│   │   │       ├── AnidleGame.tsx
+│   │   │       ├── GuessRow.tsx        # One guess with color feedback
+│   │   │       ├── AttributeCell.tsx   # Green/yellow/red cell
+│   │   │       └── AnidleKeyboard.tsx  # Virtual keyboard hint
+│   │   ├── shared/
+│   │   │   ├── AnimeSearch.tsx         # Fuzzy autocomplete input
+│   │   │   ├── ResultModal.tsx         # Win/lose modal + share button
+│   │   │   ├── ShareCard.tsx           # Shareable emoji grid
+│   │   │   ├── StreakBadge.tsx
+│   │   │   ├── CountdownTimer.tsx      # Time to next daily
+│   │   │   └── Leaderboard.tsx
+│   │   └── providers/
+│   │       ├── SessionProvider.tsx
+│   │       └── ThemeProvider.tsx
+│   ├── lib/
+│   │   ├── prisma.ts             # Prisma client singleton
+│   │   ├── auth.ts               # NextAuth config
+│   │   ├── redis.ts              # Upstash Redis client
+│   │   ├── anilist.ts            # AniList API helpers
+│   │   ├── daily.ts              # Daily challenge selection logic
+│   │   ├── score.ts              # Scoring algorithm
+│   │   ├── share.ts              # Share card generation
+│   │   ├── cloudinary.ts         # Image upload/URL helpers
+│   │   └── ratelimit.ts          # Rate limiting helpers
+│   ├── hooks/
+│   │   ├── useAnimeSearch.ts
+│   │   ├── useDailyChallenge.ts
+│   │   ├── useStreak.ts
+│   │   └── useCountdown.ts
+│   ├── types/
+│   │   ├── game.ts               # GameMode, GuessResult, etc.
+│   │   ├── anime.ts              # Anime, Character, etc.
+│   │   └── api.ts                # API request/response shapes
+│   └── constants/
+│       ├── game.ts               # Max guesses, scoring, etc.
+│       └── attributes.ts         # Anidle attribute definitions
+├── scripts/
+│   └── generate-daily.ts         # Cron: pre-generate next day's challenges
+├── .env.example
+├── next.config.ts
+├── tailwind.config.ts
+├── tsconfig.json
+└── README.md
+```
+
+---
+
+## 3. Database Schema (Prisma)
+
+```prisma
+// Core content models
+model Anime {
+  id            String   @id @default(cuid())
+  anilistId     Int      @unique
+  title         String                     // Romaji
+  titleEnglish  String?
+  titleNative   String?                    // Japanese
+  synonyms      String[]
+  coverImage    String
+  bannerImage   String?
+  year          Int?
+  season        String?                    // WINTER|SPRING|SUMMER|FALL
+  format        String?                    // TV|MOVIE|OVA|ONA|SPECIAL
+  status        String?                    // FINISHED|RELEASING|NOT_YET_RELEASED
+  episodes      Int?
+  studios       String[]
+  genres        String[]
+  tags          String[]
+  source        String?                    // MANGA|ORIGINAL|LIGHT_NOVEL|...
+  score         Float?                     // AniList mean score
+  popularity    Int?
+  description   String?
+  contentType   String   @default("ANIME") // Extension point: MANGA|MANHWA
+  
+  characters    Character[]
+  screenshots   Screenshot[]
+  openings      Opening[]
+  dailyChallenges DailyChallenge[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([title])
+  @@index([contentType])
+}
+
+model Character {
+  id            String   @id @default(cuid())
+  anilistId     Int?     @unique
+  name          String
+  nameNative    String?
+  image         String
+  silhouette    String?  // Pre-processed silhouette image URL
+  description   String?
+  
+  animeId       String
+  anime         Anime    @relation(fields: [animeId], references: [id])
+  
+  dailyChallenges DailyChallenge[]
+  
+  @@index([name])
+}
+
+model Screenshot {
+  id            String   @id @default(cuid())
+  imageUrl      String
+  blurredUrl    String?  // Pre-blurred version for hint reveal
+  episodeInfo   String?  // Stored but NOT shown to user
+  difficulty    Int      @default(3) // 1-5
+  
+  animeId       String
+  anime         Anime    @relation(fields: [animeId], references: [id])
+  
+  dailyChallenges DailyChallenge[]
+}
+
+model Opening {
+  id            String   @id @default(cuid())
+  audioUrl      String
+  title         String?
+  clipStart     Int      @default(0)   // seconds
+  clipDuration  Int      @default(30)  // seconds
+  
+  animeId       String
+  anime         Anime    @relation(fields: [animeId], references: [id])
+  
+  dailyChallenges DailyChallenge[]
+}
+
+// Daily challenge system
+model DailyChallenge {
+  id            String   @id @default(cuid())
+  date          DateTime @db.Date         // UTC date
+  mode          GameMode
+  
+  animeId       String?
+  anime         Anime?   @relation(fields: [animeId], references: [id])
+  characterId   String?
+  character     Character? @relation(fields: [characterId], references: [id])
+  screenshotId  String?
+  screenshot    Screenshot? @relation(fields: [screenshotId], references: [id])
+  openingId     String?
+  opening       Opening? @relation(fields: [openingId], references: [id])
+  
+  scores        Score[]
+  
+  @@unique([date, mode])
+  @@index([date])
+}
+
+enum GameMode {
+  SCREENSHOT
+  CHARACTER
+  OPENING
+  ANIDLE
+}
+
+// User system
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  password      String?  // hashed, null for OAuth users
+  
+  role          Role     @default(USER)
+  
+  accounts      Account[]
+  sessions      Session[]
+  scores        Score[]
+  streak        Streak?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model Account {
+  // NextAuth.js standard Account model
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Score & Leaderboard
+model Score {
+  id              String   @id @default(cuid())
+  userId          String?  // null = anonymous (local storage only)
+  user            User?    @relation(fields: [userId], references: [id])
+  
+  challengeId     String
+  challenge       DailyChallenge @relation(fields: [challengeId], references: [id])
+  
+  mode            GameMode
+  won             Boolean
+  attempts        Int
+  points          Int
+  timeTaken       Int?     // seconds
+  shareText       String?  // Cached share card text
+  
+  createdAt       DateTime @default(now())
+  
+  @@unique([userId, challengeId])
+  @@index([mode, createdAt])
+  @@index([points])
+}
+
+// Streak system
+model Streak {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id])
+  
+  currentStreak Int      @default(0)
+  longestStreak Int      @default(0)
+  lastPlayedAt  DateTime?
+  freezesAvailable Int   @default(1)
+  
+  updatedAt     DateTime @updatedAt
+}
+```
+
+---
+
+## 4. Game Logic Design
+
+### 4.1 Scoring Algorithm
+
+| Mode | Max Points | Deduction per wrong guess |
+|---|---|---|
+| Screenshot | 1000 | –150 (each blur reveal) |
+| Character | 1000 | –150 (silhouette reveal) |
+| Opening | 1000 | –100 (more audio revealed) |
+| Anidle | 1000 | –100 per guess (max 6) |
+
+Speed bonus: `+100` if solved in under 30s, `+50` if under 60s.
+
+### 4.2 Anidle Attribute Comparison
+
+| Attribute | Type | Feedback |
+|---|---|---|
+| Year | Numeric | 🟢 exact / 🟡 ±3 years / 🔴 wrong + ↑↓ arrow |
+| Season | Categorical | 🟢 / 🔴 |
+| Format | Categorical | 🟢 / 🔴 |
+| Episodes | Numeric | 🟢 / 🟡 ±10 / 🔴 + ↑↓ |
+| Genres (top 3) | Set | 🟢 all match / 🟡 partial / 🔴 none |
+| Studio | Categorical | 🟢 / 🔴 |
+| Source | Categorical | 🟢 / 🔴 |
+| Score | Numeric | 🟢 ±0.5 / 🟡 ±1.5 / 🔴 + ↑↓ |
+
+Max 6 guesses for Anidle.
+
+### 4.3 Screenshot / Character Progressive Reveal
+
+- **Screenshot**: starts maximally blurred (blur-3xl), each wrong guess reduces blur (6 hint levels)
+- **Character**: starts as silhouette, each wrong guess adds color/detail
+
+### 4.4 Opening Progressive Reveal
+
+- Starts with 5s clip
+- Each wrong guess: +5s more audio revealed (up to 30s)
+- Waveform visualizer (CSS-only for MVP)
+
+### 4.5 Daily Reset Logic
+
+- Challenges generated **at 23:00 UTC the previous day** via Vercel cron job
+- Redis cache stores the day's challenges with TTL until end of day
+- Selection algorithm: weighted random, avoiding recent repeats (last 30 days), prefer popular anime for first 100 days
+- Date key format: `YYYY-MM-DD` UTC
+
+---
+
+## 5. API Routes
+
+### Daily Challenge APIs
+```
+GET  /api/daily/screenshot     → { challenge, expiresAt }  (no answer)
+GET  /api/daily/character      → { challenge, expiresAt }
+GET  /api/daily/opening        → { challenge, expiresAt }
+GET  /api/daily/anidle         → { challenge, expiresAt }
+```
+
+### Submission APIs
+```
+POST /api/game/screenshot/submit  { guess: string }  → { correct, answer?, points? }
+POST /api/game/character/submit   { guess: string }  → { correct, answer?, points? }
+POST /api/game/opening/submit     { guess: string }  → { correct, answer?, points? }
+POST /api/game/anidle/guess       { animeId: string } → { attributes[], won, guessesLeft }
+```
+
+### Search APIs
+```
+GET  /api/search/anime?q=&limit=10  → Anime[]  (fuzzy, sorted by popularity)
+GET  /api/search/character?q=&limit=10 → Character[]
+```
+
+### User/Social APIs
+```
+GET  /api/leaderboard?mode=&period=daily|weekly  → LeaderboardEntry[]
+GET  /api/streak                                 → StreakData
+POST /api/streak/freeze                          → StreakData
+GET  /api/share/generate?scoreId=               → { text, imageUrl }
+```
+
+### Admin APIs (protected)
+```
+POST /api/admin/daily/generate    Trigger manual challenge generation
+POST /api/admin/anime/import      Import from AniList
+```
+
+---
+
+## 6. Component Architecture
+
+```mermaid
+flowchart TD
+    A["Root Layout\n(ThemeProvider, SessionProvider)"] --> B["Home / Mode Selector"]
+    B --> C["Screenshot Game"]
+    B --> D["Character Game"]
+    B --> E["Opening Game"]
+    B --> F["Anidle Game"]
+    
+    C --> G["AnimeSearch\n(shared)"]
+    D --> G
+    E --> G
+    F --> G
+    
+    C --> H["ResultModal\n(shared)"]
+    D --> H
+    E --> H
+    F --> H
+    
+    H --> I["ShareCard"]
+    H --> J["StreakBadge"]
+    H --> K["CountdownTimer"]
+    
+    F --> L["GuessRow × 6"]
+    L --> M["AttributeCell × 8"]
+```
+
+---
+
+## 7. Caching & Performance Strategy
+
+| Data | Cache | TTL |
+|---|---|---|
+| Daily challenge (non-answer) | Redis | Until midnight UTC |
+| Anime search results | Redis | 1 hour |
+| Leaderboard | Redis | 5 minutes |
+| User streak | Redis | 15 minutes |
+| OG share images | Cloudinary | Permanent |
+
+- Next.js **Route Segment Config** for per-route revalidation
+- **`unstable_cache`** for DB queries in RSCs
+- Connection pooling via **PgBouncer** (Neon includes this)
+- Vercel **Edge Middleware** for rate limiting on submission routes
+
+---
+
+## 8. Authentication Flow
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant App
+    participant NextAuth
+    participant DB
+
+    User->>App: Click "Sign In"
+    App->>NextAuth: Redirect to /login
+    NextAuth->>User: Show providers (Google, Discord, Email)
+    User->>NextAuth: Select provider / submit credentials
+    NextAuth->>DB: Upsert User + Account
+    NextAuth->>App: JWT session cookie
+    App->>DB: Initialize Streak record if new user
+    App->>User: Authenticated dashboard
+```
+
+> [!NOTE]
+> Anonymous play is fully supported. Stats stored in `localStorage` until user signs up (merge on first login).
+
+---
+
+## 9. Streak Logic
+
+```
+On daily completion:
+  lastPlayed = today (UTC date)?
+    → already played, skip
+  lastPlayed = yesterday?
+    → streak++
+  lastPlayed = 2 days ago AND freezesAvailable > 0?
+    → streak preserved, freezesAvailable--
+  else?
+    → streak reset to 1
+
+longestStreak = max(longestStreak, currentStreak)
+```
+
+Streak freeze earned every 7-day streak milestone.
+
+---
+
+## 10. Share Card Format
+
+```
+OtakuGuessr — Screenshot Mode 📸
+2026-01-15
+
+🟢🟡🔴🟡🟢
+Score: 750/1000 | Streak: 🔥 5
+
+otakuguessr.com
+```
+
+Generated as plain text (emoji grid) for easy copy-paste. Optional server-rendered PNG via `@vercel/og` for rich link previews.
+
+---
+
+## 11. Environment Variables
+
+```bash
+# Database
+DATABASE_URL=postgresql://...
+
+# Auth
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=...
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+DISCORD_CLIENT_ID=...
+DISCORD_CLIENT_SECRET=...
+
+# Redis (Upstash)
+UPSTASH_REDIS_REST_URL=...
+UPSTASH_REDIS_REST_TOKEN=...
+
+# Cloudinary
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
+
+# AniList (no key needed, public API)
+ANILIST_API_URL=https://graphql.anilist.co
+
+# Cron secret
+CRON_SECRET=...
+```
+
+---
+
+## 12. Build Order (Step-by-Step)
+
+| Phase | Steps | What Gets Built |
+|---|---|---|
+| **1 — Scaffolding** | 1–3 | Next.js init, Tailwind, shadcn/ui, Prisma setup, env config |
+| **2 — Database** | 4–6 | Schema, migrations, seed script (AniList top 500 anime + characters) |
+| **3 — Auth** | 7–8 | NextAuth config, login/register pages, session provider |
+| **4 — Core Game: Anidle** | 9–13 | Daily API, guess API, attribute comparison, GuessRow UI, ResultModal |
+| **5 — Screenshot Mode** | 14–17 | Daily API, blur reveal UI, submit API, scoring |
+| **6 — Character Mode** | 18–20 | Daily API, silhouette reveal, submit API |
+| **7 — Opening Mode** | 21–23 | Daily API, AudioPlayer, progressive reveal, submit API |
+| **8 — Search** | 24–25 | Fuzzy search API, AnimeSearch autocomplete component |
+| **9 — Streaks & Scoring** | 26–28 | Streak logic, score persistence, streak freeze |
+| **10 — Leaderboard** | 29–30 | Leaderboard API, Leaderboard component, profile page |
+| **11 — Share** | 31–32 | Share card text, OG image via @vercel/og |
+| **12 — Practice Mode** | 33 | Practice routes (random non-daily challenges) |
+| **13 — Polish** | 34–36 | Countdown timer, mobile responsiveness, loading skeletons |
+| **14 — Cron & Cache** | 37–38 | Vercel cron for daily generation, Redis caching |
+| **15 — README & Deploy** | 39–40 | README, vercel.json, deployment checklist |
+
+---
+
+## 13. Production Readiness (30k+ Users)
+
+- **Horizontal scaling**: Vercel serverless functions auto-scale
+- **DB connection pooling**: Neon with PgBouncer (max_connections managed)
+- **Redis**: All hot-path reads (daily challenge, leaderboard) served from cache
+- **Rate limiting**: Upstash rate limit on all submission routes (5 req/min per IP)
+- **CDN**: All images via Cloudinary CDN, audio via CDN-backed storage
+- **Error monitoring**: Ready for Sentry integration (placeholder)
+- **Analytics**: Ready for Vercel Analytics
+- **Database indexes**: On all foreign keys, search fields, leaderboard sort columns
+
+---
+
+## 14. Extension Points (Future: Manga/Manhwa/Manhua)
+
+- `Anime.contentType` field already present (`"ANIME"` default)
+- All game modes filter by `contentType` — add `"MANGA"` etc. to unlock
+- `GameMode` enum can be extended (e.g., `MANGA_PANEL`, `MANHWA_COVER`)
+- Separate daily challenge seeds by content type
+
+---
+
+*Approve this plan to begin implementation.*

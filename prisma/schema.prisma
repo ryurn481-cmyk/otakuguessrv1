@@ -1,0 +1,276 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Core Content Models ───────────────────────────────────────────────────────
+
+model Anime {
+  id            String   @id @default(cuid())
+  anilistId     Int      @unique
+  title         String
+  titleEnglish  String?
+  titleNative   String?
+  synonyms      String[]
+  coverImage    String
+  bannerImage   String?
+  year          Int?
+  season        String?  // WINTER|SPRING|SUMMER|FALL
+  format        String?  // TV|MOVIE|OVA|ONA|SPECIAL|MUSIC
+  status        String?  // FINISHED|RELEASING|NOT_YET_RELEASED|CANCELLED|HIATUS
+  episodes      Int?
+  studios       String[]
+  genres        String[]
+  tags          String[]
+  source        String?  // MANGA|ORIGINAL|LIGHT_NOVEL|VISUAL_NOVEL|VIDEO_GAME|OTHER|NOVEL|DOUJINSHI|ANIME|MANHWA|MANHUA
+  score         Float?   // AniList mean score (0-100)
+  popularity    Int?
+  description   String?
+  contentType   String   @default("ANIME") // Extension point: MANGA|MANHWA|MANHUA
+
+  characters      Character[]
+  screenshots     Screenshot[]
+  openings        Opening[]
+  dailyChallenges DailyChallenge[]
+  practiceChallenges PracticeChallenge[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([title])
+  @@index([contentType])
+  @@index([popularity])
+  @@index([anilistId])
+}
+
+model Character {
+  id          String  @id @default(cuid())
+  anilistId   Int?    @unique
+  name        String
+  nameNative  String?
+  image       String
+  silhouette  String? // Pre-processed silhouette image URL
+  description String?
+
+  animeId String
+  anime   Anime  @relation(fields: [animeId], references: [id], onDelete: Cascade)
+
+  dailyChallenges DailyChallenge[]
+  practiceChallenges PracticeChallenge[]
+  characterRounds CharacterRound[]
+
+  @@index([name])
+  @@index([animeId])
+}
+
+model Screenshot {
+  id          String  @id @default(cuid())
+  imageUrl    String
+  blurredUrl  String? // Pre-blurred version stored, but served dynamically
+  difficulty  Int     @default(3) // 1-5
+  clueType    String  @default("SCREENSHOT") // SCREENSHOT|PANEL|PROP|EYES
+  hint        String?
+
+  animeId String
+  anime   Anime  @relation(fields: [animeId], references: [id], onDelete: Cascade)
+
+  dailyChallenges DailyChallenge[]
+  practiceChallenges PracticeChallenge[]
+
+  @@index([animeId])
+}
+
+model Opening {
+  id           String @id @default(cuid())
+  audioUrl     String
+  title        String?
+  clipStart    Int    @default(0)  // seconds
+  clipDuration Int    @default(30) // seconds
+
+  animeId String
+  anime   Anime  @relation(fields: [animeId], references: [id], onDelete: Cascade)
+
+  dailyChallenges DailyChallenge[]
+
+  @@index([animeId])
+}
+
+// ─── Daily Challenge System ────────────────────────────────────────────────────
+
+model DailyChallenge {
+  id   String   @id @default(cuid())
+  date DateTime @db.Date // UTC date
+  mode GameMode
+  // The medium a daily was generated for. MIXED is a deliberate cross-medium pool.
+  contentType String @default("ANIME")
+
+  animeId     String?
+  anime       Anime?     @relation(fields: [animeId], references: [id])
+  characterId String?
+  character   Character? @relation(fields: [characterId], references: [id])
+  screenshotId String?
+  screenshot  Screenshot? @relation(fields: [screenshotId], references: [id])
+  openingId   String?
+  opening     Opening?   @relation(fields: [openingId], references: [id])
+
+  scores Score[]
+  characterRounds CharacterRound[]
+
+  @@unique([date, mode, contentType])
+  @@index([date])
+  @@index([mode])
+}
+
+model CharacterRound {
+  id          String @id @default(cuid())
+  challengeId String
+  challenge   DailyChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  position    Int
+
+  @@unique([challengeId, position])
+  @@index([characterId])
+}
+
+model PracticeChallenge {
+  id        String   @id @default(cuid())
+  mode      GameMode
+  contentType String @default("ANIME")
+  animeId   String
+  anime     Anime    @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  characterId String?
+  character Character? @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  screenshotId String?
+  screenshot Screenshot? @relation(fields: [screenshotId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([mode, expiresAt])
+}
+
+enum GameMode {
+  SCREENSHOT
+  PANEL
+  PROP
+  EYES
+  CHARACTER
+  OPENING
+  ANIDLE
+}
+
+// ─── User System ──────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  password      String?   // bcrypt hashed; null for OAuth users
+
+  role Role @default(USER)
+
+  accounts Account[]
+  sessions Session[]
+  scores   Score[]
+  streak   Streak?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+// NextAuth.js standard models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Score & Leaderboard ──────────────────────────────────────────────────────
+
+model Score {
+  id     String  @id @default(cuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  challengeId String
+  challenge   DailyChallenge @relation(fields: [challengeId], references: [id])
+
+  mode      GameMode
+  won       Boolean
+  attempts  Int
+  points    Int
+  timeTaken Int?    // seconds
+  shareText String? // cached emoji share card
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, challengeId])
+  @@index([mode, createdAt])
+  @@index([points])
+  @@index([userId])
+}
+
+// ─── Streak System ────────────────────────────────────────────────────────────
+
+model Streak {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  currentStreak    Int      @default(0)
+  longestStreak    Int      @default(0)
+  lastPlayedAt     DateTime?
+  freezesAvailable Int      @default(1)
+
+  updatedAt DateTime @updatedAt
+}
+

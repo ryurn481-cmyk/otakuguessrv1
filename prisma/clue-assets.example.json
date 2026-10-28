@@ -1,0 +1,19 @@
+[
+  {
+    "anilistId": 1535,
+    "type": "PROP",
+    "sourceUrl": "https://licensed-source.example/death-note-prop.jpg",
+    "hint": "Notebook",
+    "difficulty": 3,
+    "license": "Your verified license or permission reference",
+    "attribution": "Creator / source credit"
+  },
+  {
+    "anilistId": 1535,
+    "type": "EYES",
+    "sourceUrl": "https://licensed-source.example/character-eyes.jpg",
+    "difficulty": 4,
+    "license": "Your verified license or permission reference",
+    "attribution": "Creator / source credit"
+  }
+]

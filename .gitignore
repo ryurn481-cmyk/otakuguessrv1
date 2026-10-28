@@ -26,7 +26,12 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
+.env
 .env*.local
+
+# Your licensed Screenshot and Opening media URLs. Keep the documented template.
+/prisma/content-catalog.json
+/prisma/clue-assets.json
 
 # vercel
 .vercel

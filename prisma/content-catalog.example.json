@@ -1,0 +1,21 @@
+{
+  "screenshots": [
+    {
+      "anilistId": 1535,
+      "imageUrl": "https://res.cloudinary.com/npl65awd/image/upload/v1792921639/249fc64ea6e6b95621f595613c64d341.jpg",
+      "blurredUrl": null,
+      "difficulty": 3
+    }
+  ],
+  "openings": [
+    {
+      "anilistId": 1535,
+      "audioUrl": "https://nu.vgmtreasurechest.com/soundtracks/dragon-ball-z-bgm/gyaevpoa/1-01.%20Makafushigi%20Adventure%21.mp3",
+      "title": "Makafushigi Adventure!",
+      "clipStart": 0,
+      "clipDuration": 30
+    }
+  ],
+  "props": [],
+  "eyes": []
+}
