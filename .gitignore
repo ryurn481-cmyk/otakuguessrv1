@@ -32,6 +32,7 @@ yarn-error.log*
 # Your licensed Screenshot and Opening media URLs. Keep the documented template.
 /prisma/content-catalog.json
 /prisma/clue-assets.json
+/prisma/migration-archive/
 
 # vercel
 .vercel

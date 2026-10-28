@@ -6,7 +6,27 @@ import { anilistQuery, TOP_MEDIA_QUERY } from '../src/lib/anilist';
 
 loadEnvConfig(process.cwd());
 
-const prisma = new PrismaClient();
+// Imports are administrative, long-running work. Use Neon's direct endpoint
+// when it is available; the pooled URL remains for normal web traffic.
+const prisma = new PrismaClient({
+  datasources: {
+    db: { url: process.env.DIRECT_URL ?? process.env.DATABASE_URL },
+  },
+});
+
+async function withConnectionRetry<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      const isConnectionReset = message.includes('Server has closed the connection') || message.includes('P1017');
+      if (!isConnectionReset || attempt === 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+    }
+  }
+  throw new Error('Unreachable');
+}
 
 type CatalogEntry = {
   anilistId: number;
@@ -164,15 +184,16 @@ async function main() {
     });
     for (const media of response.Page.media) {
       const coverImage = media.coverImage.extraLarge ?? media.coverImage.large;
-      if (!coverImage || !media.title.romaji) {
+      const title = media.title.romaji;
+      if (!coverImage || !title) {
         console.warn(`Skipping AniList ID ${media.id}: it has no usable title or cover image.`);
         continue;
       }
 
-      const anime = await prisma.anime.upsert({
+      const anime = await withConnectionRetry(() => prisma.anime.upsert({
         where: { anilistId: media.id },
         update: {
-          title: media.title.romaji,
+          title,
           titleEnglish: media.title.english,
           titleNative: media.title.native,
           synonyms: media.synonyms,
@@ -194,7 +215,7 @@ async function main() {
         },
         create: {
           anilistId: media.id,
-          title: media.title.romaji,
+          title,
           titleEnglish: media.title.english,
           titleNative: media.title.native,
           synonyms: media.synonyms,
@@ -214,30 +235,32 @@ async function main() {
           description: media.description,
           contentType,
         },
-      });
+      }));
       animeCount++;
 
       for (const edge of media.characters.edges) {
         const character = edge.node;
-        if (!character.name.full || !character.image.large) continue;
-        await prisma.character.upsert({
+        const name = character.name.full;
+        const image = character.image.large;
+        if (!name || !image) continue;
+        await withConnectionRetry(() => prisma.character.upsert({
           where: { anilistId: character.id },
           update: {
-            name: character.name.full,
+            name,
             nameNative: character.name.native,
-            image: character.image.large,
+            image,
             description: character.description,
             animeId: anime.id,
           },
           create: {
             anilistId: character.id,
-            name: character.name.full,
+            name,
             nameNative: character.name.native,
-            image: character.image.large,
+            image,
             description: character.description,
             animeId: anime.id,
           },
-        });
+        }));
         characterCount++;
       }
     }
