@@ -61,6 +61,8 @@ type AniListMedia = {
   format: string | null;
   status: string | null;
   episodes: number | null;
+  chapters: number | null;
+  volumes: number | null;
   studios: { nodes: Array<{ name: string; isAnimationStudio: boolean }> };
   genres: string[];
   tags: Array<{ name: string; rank: number }>;
@@ -68,6 +70,7 @@ type AniListMedia = {
   meanScore: number | null;
   popularity: number | null;
   description: string | null;
+  staff: { edges: Array<{ role: string; node: { name: { full: string | null } } }> };
   characters: {
     edges: Array<{
       node: {
@@ -204,6 +207,12 @@ async function main() {
           format: media.format,
           status: media.status,
           episodes: media.episodes,
+          chapters: media.chapters,
+          volumes: media.volumes,
+          author: media.staff.edges.find((edge) => /Original Creator|Story|Writer/i.test(edge.role))?.node.name.full ?? null,
+          artist: media.staff.edges.find((edge) => /Art|Illustration/i.test(edge.role))?.node.name.full ?? null,
+          director: media.staff.edges.find((edge) => /Director/i.test(edge.role))?.node.name.full ?? null,
+          composer: media.staff.edges.find((edge) => /Music/i.test(edge.role))?.node.name.full ?? null,
           studios: media.studios.nodes.filter((studio) => studio.isAnimationStudio).map((studio) => studio.name),
           genres: media.genres,
           tags: media.tags.slice(0, 15).map((tag) => tag.name),
@@ -226,6 +235,12 @@ async function main() {
           format: media.format,
           status: media.status,
           episodes: media.episodes,
+          chapters: media.chapters,
+          volumes: media.volumes,
+          author: media.staff.edges.find((edge) => /Original Creator|Story|Writer/i.test(edge.role))?.node.name.full ?? null,
+          artist: media.staff.edges.find((edge) => /Art|Illustration/i.test(edge.role))?.node.name.full ?? null,
+          director: media.staff.edges.find((edge) => /Director/i.test(edge.role))?.node.name.full ?? null,
+          composer: media.staff.edges.find((edge) => /Music/i.test(edge.role))?.node.name.full ?? null,
           studios: media.studios.nodes.filter((studio) => studio.isAnimationStudio).map((studio) => studio.name),
           genres: media.genres,
           tags: media.tags.slice(0, 15).map((tag) => tag.name),

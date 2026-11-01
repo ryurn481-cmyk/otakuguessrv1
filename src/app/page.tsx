@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, AudioLines, BookOpen, Brain, Camera, Flame, Sparkles, UserRound } from "lucide-react";
+import { ArrowRight, AudioLines, BookOpen, Brain, Flame, Sparkles, UserRound } from "lucide-react";
 import { ModeSelector } from "@/components/layout/mode-selector";
 import { ContentTypeTabs } from '@/components/layout/content-type-tabs';
 import { contentTypeFrom } from '@/lib/content-type';
@@ -9,8 +9,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
   const isAnime = contentType === 'ANIME';
   const highlights = isAnime
     ? [
-        { icon: Camera, title: "Screenshot", text: "Recognize the scene before the blur gives it away.", href: "/screenshot", accent: "from-violet-500 to-fuchsia-500" },
         { icon: UserRound, title: "Character", text: "Name the character and the series from their silhouette.", href: "/character", accent: "from-sky-500 to-cyan-400" },
+        { icon: Brain, title: "Anidle", text: "Use each attribute clue to narrow down today’s mystery title.", href: "/anidle", accent: "from-emerald-500 to-teal-400" },
         { icon: AudioLines, title: "Opening", text: "Returning when we have a rights-cleared music catalog.", accent: "from-amber-400 to-orange-500", comingSoon: true },
       ]
     : [
@@ -24,7 +24,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
       <div className="mx-auto max-w-6xl text-center">
         <div className="inline-flex items-center gap-2 rounded-full border border-violet-400/20 bg-violet-400/10 px-4 py-2 text-sm font-medium text-violet-200"><Sparkles className="h-4 w-4" /> Your daily {contentType === 'MIXED' ? 'otaku' : contentType.toLowerCase()} brain teaser</div>
         <h1 className="mx-auto mt-6 max-w-4xl text-balance text-5xl font-black tracking-tight text-white sm:text-7xl">How well do you <span className="bg-gradient-to-r from-violet-300 via-fuchsia-300 to-rose-300 bg-clip-text text-transparent">know your otaku media?</span></h1>
-        <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-300">Four fresh daily challenges. One chance to prove your otaku instincts.</p>
+        <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-300">Fresh daily challenges for every kind of otaku instinct.</p>
         <div className="mt-8"><ContentTypeTabs current={contentType} /></div><div className="mt-5"><ModeSelector contentType={contentType} /></div>
       </div>
     </section>

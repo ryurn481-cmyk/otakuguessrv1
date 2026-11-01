@@ -1,6 +1,6 @@
 // Game constants
 
-export const GAME_MODES = ['SCREENSHOT', 'PANEL', 'PROP', 'EYES', 'CHARACTER', 'OPENING', 'ANIDLE'] as const;
+export const GAME_MODES = ['SCREENSHOT', 'PANEL', 'PROP', 'EYES', 'CHARACTER', 'OPENING', 'ANIDLE', 'ANILINK', 'STATDUEL', 'SAKUGASYNC'] as const;
 
 export const MAX_GUESSES = {
   SCREENSHOT: 6,
@@ -10,6 +10,9 @@ export const MAX_GUESSES = {
   CHARACTER: 3,
   OPENING: 6,
   ANIDLE: 6,
+  ANILINK: 30,
+  STATDUEL: 20,
+  SAKUGASYNC: 5,
 } as const;
 
 export const MAX_POINTS = {
@@ -20,6 +23,9 @@ export const MAX_POINTS = {
   CHARACTER: 1000,
   OPENING: 1000,
   ANIDLE: 1000,
+  ANILINK: 1000,
+  STATDUEL: 1000,
+  SAKUGASYNC: 5000,
 } as const;
 
 export const POINTS_DEDUCTION = {
@@ -30,6 +36,9 @@ export const POINTS_DEDUCTION = {
   CHARACTER: 150,
   OPENING: 150,
   ANIDLE: 100,
+  ANILINK: 100,
+  STATDUEL: 0,
+  SAKUGASYNC: 0,
 } as const;
 
 export const SPEED_BONUS = {

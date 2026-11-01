@@ -63,6 +63,8 @@ query ($page: Int, $perPage: Int) {
       format
       status
       episodes
+      chapters
+      volumes
       studios { nodes { name isAnimationStudio } }
       genres
       tags { name rank }
@@ -70,6 +72,9 @@ query ($page: Int, $perPage: Int) {
       meanScore
       popularity
       description(asHtml: false)
+      staff(perPage: 12, sort: RELEVANCE) {
+        edges { role node { name { full } } }
+      }
       characters(page: 1, perPage: 10, sort: ROLE) {
         edges {
           node {

@@ -36,11 +36,27 @@ model Anime {
   description   String?
   contentType   String   @default("ANIME") // Extension point: MANGA|MANHWA|MANHUA
 
-  characters      Character[]
-  screenshots     Screenshot[]
-  openings        Opening[]
-  dailyChallenges DailyChallenge[]
+  // ── Manga / Manhwa fields ─────────────────────────────────────────────────
+  chapters      Int?     // total chapters (null for anime / ongoing)
+  volumes       Int?     // total volumes
+  author        String?  // primary author / writer
+  artist        String?  // artist if different from author
+  publisher     String?  // e.g. "Shueisha", "Webtoon"
+  magazine      String?  // e.g. "Weekly Shounen Jump"
+
+  // ── Anime extra fields for AniLink hops ──────────────────────────────────
+  director      String?  // primary director
+  composer      String?  // music composer
+  sourceTitle   String?  // original source title (for adaptations)
+  sourceMangaId String?  // ID of manga entry in this table (self-ref link)
+
+  characters         Character[]
+  screenshots        Screenshot[]
+  openings           Opening[]
+  dailyChallenges    DailyChallenge[]
   practiceChallenges PracticeChallenge[]
+  aniLinkStart       AniLinkChallenge[] @relation("AniLinkStart")
+  aniLinkTarget      AniLinkChallenge[] @relation("AniLinkTarget")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -122,7 +138,10 @@ model DailyChallenge {
   opening     Opening?   @relation(fields: [openingId], references: [id])
 
   scores Score[]
-  characterRounds CharacterRound[]
+  characterRounds     CharacterRound[]
+  aniLinkChallenge    AniLinkChallenge?
+  statDuelChallenge   StatDuelChallenge?
+  sakugaSyncChallenge SakugaSyncChallenge?
 
   @@unique([date, mode, contentType])
   @@index([date])
@@ -165,6 +184,44 @@ enum GameMode {
   CHARACTER
   OPENING
   ANIDLE
+  ANILINK    // Six-degrees graph navigation
+  STATDUEL   // Higher / Lower stat comparison
+  SAKUGASYNC // Blind timing / power-level game
+}
+
+// ─── AniLink Challenge ────────────────────────────────────────────────────────
+
+model AniLinkChallenge {
+  id               String         @id @default(cuid())
+  dailyChallengeId String         @unique
+  dailyChallenge   DailyChallenge @relation(fields: [dailyChallengeId], references: [id], onDelete: Cascade)
+  startAnimeId     String
+  startAnime       Anime          @relation("AniLinkStart", fields: [startAnimeId], references: [id])
+  targetAnimeId    String
+  targetAnime      Anime          @relation("AniLinkTarget", fields: [targetAnimeId], references: [id])
+  minimumHops      Int            // pre-computed BFS shortest path
+}
+
+// ─── StatDuel Challenge ───────────────────────────────────────────────────────
+
+model StatDuelChallenge {
+  id               String         @id @default(cuid())
+  dailyChallengeId String         @unique
+  dailyChallenge   DailyChallenge @relation(fields: [dailyChallengeId], references: [id], onDelete: Cascade)
+  /// JSON array: [{leftId, rightId, stat, contentTypeFilter}] — 20 pairs
+  pairsJson        String
+  seed             Int            // RNG seed (reproducible for same-day fairness)
+}
+
+// ─── SakugaSync Challenge ─────────────────────────────────────────────────────
+
+model SakugaSyncChallenge {
+  id               String         @id @default(cuid())
+  dailyChallengeId String         @unique
+  dailyChallenge   DailyChallenge @relation(fields: [dailyChallengeId], references: [id], onDelete: Cascade)
+  /// JSON array of 5 target durations in milliseconds, e.g. [7420, 11800, 9230, 13050, 6780]
+  targetDurationsJson String
+  seed             Int
 }
 
 // ─── User System ──────────────────────────────────────────────────────────────
