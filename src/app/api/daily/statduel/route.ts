@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cacheGet, cacheSet, CACHE_TTL } from '@/lib/redis';
 import { getTodayUTC, getDailyExpiry, formatDateKey } from '@/lib/daily';
+import { contentTypeFrom } from '@/lib/content-type';
 
 export const runtime = 'nodejs';
 export const revalidate = 0;
@@ -31,11 +32,13 @@ interface StatDuelChallengeData {
 
 const CACHE_KEY_PREFIX = 'daily:statduel:';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const requestedContentType = contentTypeFrom(new URL(request.url).searchParams.get('contentType'));
+    const contentType = requestedContentType === 'ANIME' ? 'ANIME' : requestedContentType === 'MIXED' ? 'MIXED' : 'MANGA';
     const today = getTodayUTC();
     const dateKey = formatDateKey(today);
-    const cacheKey = `${CACHE_KEY_PREFIX}${dateKey}`;
+    const cacheKey = `${CACHE_KEY_PREFIX}${dateKey}:${contentType}`;
 
     // Check cache
     const cached = await cacheGet<StatDuelChallengeData>(cacheKey);
@@ -43,7 +46,7 @@ export async function GET() {
       return NextResponse.json(cached);
     }
 
-    const seed = dateToSeed(dateKey);
+    const seed = dateToSeed(dateKey) + (contentType === 'ANIME' ? 0 : contentType === 'MANGA' ? 1 : 2);
     const rng = mulberry32(seed);
 
     // Find or create a DailyChallenge row for STATDUEL
@@ -52,7 +55,7 @@ export async function GET() {
         date_mode_contentType: {
           date: today,
           mode: 'STATDUEL',
-          contentType: 'ANIME', // placeholder — StatDuel doesn't use a single animeId
+          contentType,
         },
       },
       include: { statDuelChallenge: true },
@@ -110,14 +113,14 @@ export async function GET() {
           date_mode_contentType: {
             date: today,
             mode: 'STATDUEL',
-            contentType: 'ANIME',
+            contentType,
           },
         },
         update: {},
         create: {
           date: today,
           mode: 'STATDUEL',
-          contentType: 'ANIME',
+          contentType,
           // animeId not required for StatDuel
         },
       });

@@ -1,12 +1,16 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { contentTypeFrom } from '@/lib/content-type';
 type Title = { id: string; title: string; titleEnglish: string | null; coverImage: string; year: number | null; contentType: string };
 type Pair = { left: Title; right: Title; stat: string };
 const labels: Record<string, string> = { score: 'AniList score', popularity: 'popularity', year: 'start year', episodes: 'episodes', chapters: 'chapters', volumes: 'volumes', genres_count: 'genres' };
 export function StatDuelGame({ practice = false }: { practice?: boolean }) {
+  const searchParams = useSearchParams(); const initialContentType = contentTypeFrom(searchParams.get('contentType')); const initialFilter = initialContentType === 'ANIME' ? 'ANIME' : initialContentType === 'MIXED' ? 'MIXED' : 'MANGA';
   const totalRounds = 20;
-  const [daily, setDaily] = useState<{ id: string; seed: number } | null>(null); const [pair, setPair] = useState<Pair | null>(null); const [index, setIndex] = useState(0); const [filter, setFilter] = useState<'ANIME' | 'MANGA' | 'MIXED'>('ANIME'); const [correctCount, setCorrectCount] = useState(0); const [result, setResult] = useState<{ correct: boolean; explanation: string } | null>(null); const [ended, setEnded] = useState(false); const [started] = useState(Date.now());
-  useEffect(() => { fetch('/api/daily/statduel').then(response => response.json()).then(setDaily); }, []);
+  const [daily, setDaily] = useState<{ id: string; seed: number } | null>(null); const [pair, setPair] = useState<Pair | null>(null); const [index, setIndex] = useState(0); const [filter, setFilter] = useState<'ANIME' | 'MANGA' | 'MIXED'>(initialFilter); const [correctCount, setCorrectCount] = useState(0); const [result, setResult] = useState<{ correct: boolean; explanation: string } | null>(null); const [ended, setEnded] = useState(false); const [started] = useState(Date.now());
+  useEffect(() => { setFilter(initialFilter); setIndex(0); setCorrectCount(0); setEnded(false); }, [initialFilter]);
+  useEffect(() => { setDaily(null); fetch(`/api/daily/statduel?contentType=${filter}`).then(response => response.json()).then(setDaily); }, [filter]);
   useEffect(() => { if (!daily || ended) return; setResult(null); fetch(`/api/game/statduel/pair?seed=${daily.seed}&index=${index}&contentFilter=${filter}`).then(response => response.json()).then(setPair).catch(() => setPair(null)); }, [daily, index, filter, ended]);
   async function answer(side: 'left' | 'right') { if (!pair || result) return; const response = await fetch('/api/game/statduel/answer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leftId: pair.left.id, rightId: pair.right.id, stat: pair.stat, chosenSide: side, pairIndex: index }) }); const data = await response.json(); setResult(data); }
   function advance() { if (!result) return; if (result.correct) setCorrectCount(value => value + 1); if (index + 1 >= totalRounds) { setEnded(true); return; } setIndex(value => value + 1); }

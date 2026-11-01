@@ -1,2 +1,3 @@
 import { AniLinkGame } from '@/components/game/anilink/anilink-game';
-export default function Page() { return <AniLinkGame />; }
+import { Suspense } from 'react';
+export default function Page() { return <Suspense><AniLinkGame /></Suspense>; }

@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cacheGet, cacheSet } from '@/lib/redis';
 import { getTodayUTC, formatDateKey, getDailyExpiry, isDatabaseConfigured } from '@/lib/daily';
 import { bfsShortestPath, type AnimeNode } from '@/lib/anilink';
+import { contentTypeFrom, type PlayableContentType } from '@/lib/content-type';
 
 export const runtime = 'nodejs';
 export const revalidate = 0;
@@ -60,9 +61,9 @@ function toBasic(anime: {
 /**
  * Load BFS pool from DB — top N titles by popularity.
  */
-async function loadBfsPool(limit = BFS_POOL): Promise<AnimeNode[]> {
+async function loadBfsPool(contentType: PlayableContentType, limit = BFS_POOL): Promise<AnimeNode[]> {
   const rows = await prisma.anime.findMany({
-    where: { popularity: { not: null } },
+    where: { popularity: { not: null }, ...(contentType === 'MIXED' ? {} : { contentType }) },
     orderBy: { popularity: 'desc' },
     take: limit,
     select: {
@@ -136,7 +137,7 @@ async function selectPair(
   return null;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   if (!isDatabaseConfigured()) {
     return NextResponse.json(
       { error: 'Database not configured.' },
@@ -145,9 +146,10 @@ export async function GET() {
   }
 
   try {
+    const contentType = contentTypeFrom(new URL(request.url).searchParams.get('contentType'));
     const today = getTodayUTC();
     const dateKey = formatDateKey(today);
-    const cacheKey = `${CACHE_KEY_PREFIX}${dateKey}`;
+    const cacheKey = `${CACHE_KEY_PREFIX}${dateKey}:${contentType}`;
 
     // 1. Check Redis cache
     const cached = await cacheGet<AniLinkDailyResponse>(cacheKey);
@@ -156,7 +158,7 @@ export async function GET() {
     // 2. Check DB for existing AniLinkChallenge today
     const existing = await prisma.dailyChallenge.findUnique({
       where: {
-        date_mode_contentType: { date: today, mode: 'ANILINK', contentType: 'ANIME' },
+        date_mode_contentType: { date: today, mode: 'ANILINK', contentType },
       },
       include: {
         aniLinkChallenge: {
@@ -193,7 +195,7 @@ export async function GET() {
     }
 
     // 3. Generate a new pair via BFS
-    const pool = await loadBfsPool();
+    const pool = await loadBfsPool(contentType);
     const pair = await selectPair(pool);
 
     if (!pair) {
@@ -206,12 +208,12 @@ export async function GET() {
     // 4. Persist DailyChallenge + AniLinkChallenge (upsert-safe)
     const dailyChallenge = await prisma.dailyChallenge.upsert({
       where: {
-        date_mode_contentType: { date: today, mode: 'ANILINK', contentType: 'ANIME' },
+        date_mode_contentType: { date: today, mode: 'ANILINK', contentType },
       },
       create: {
         date: today,
         mode: 'ANILINK',
-        contentType: 'ANIME',
+        contentType,
         animeId: pair.start.id,
         aniLinkChallenge: {
           create: {

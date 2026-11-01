@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
       rightAnime = right as AnimeData | null;
     } else if (contentFilter === 'MANGA') {
       const count = await prisma.anime.count({
-        where: { contentType: { in: ['MANGA', 'MANHWA'] }, score: { not: null } },
+        where: { contentType: { in: ['MANGA', 'MANHWA', 'MANHUA'] }, score: { not: null } },
       });
       if (count < 2) {
         return NextResponse.json({ error: 'Not enough manga in database' }, { status: 503 });
@@ -138,13 +138,13 @@ export async function GET(request: NextRequest) {
 
       const [left, right] = await Promise.all([
         prisma.anime.findFirst({
-          where: { contentType: { in: ['MANGA', 'MANHWA'] }, score: { not: null } },
+          where: { contentType: { in: ['MANGA', 'MANHWA', 'MANHUA'] }, score: { not: null } },
           orderBy: { popularity: 'asc' },
           skip: leftSkip,
           select,
         }),
         prisma.anime.findFirst({
-          where: { contentType: { in: ['MANGA', 'MANHWA'] }, score: { not: null } },
+          where: { contentType: { in: ['MANGA', 'MANHWA', 'MANHUA'] }, score: { not: null } },
           orderBy: { popularity: 'asc' },
           skip: rightSkip,
           select,
@@ -158,7 +158,7 @@ export async function GET(request: NextRequest) {
         where: { contentType: 'ANIME', score: { not: null } },
       });
       const mangaCount = await prisma.anime.count({
-        where: { contentType: { in: ['MANGA', 'MANHWA'] }, score: { not: null } },
+        where: { contentType: { in: ['MANGA', 'MANHWA', 'MANHUA'] }, score: { not: null } },
       });
 
       if (animeCount < 1 || mangaCount < 1) {
@@ -179,7 +179,7 @@ export async function GET(request: NextRequest) {
           select,
         }),
         prisma.anime.findFirst({
-          where: { contentType: { in: ['MANGA', 'MANHWA'] }, score: { not: null } },
+          where: { contentType: { in: ['MANGA', 'MANHWA', 'MANHUA'] }, score: { not: null } },
           orderBy: { popularity: 'asc' },
           skip: mangaSkip,
           select,

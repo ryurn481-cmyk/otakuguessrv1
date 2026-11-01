@@ -1,2 +1,3 @@
 import { StatDuelGame } from '@/components/game/statduel/statduel-game';
-export default function Page() { return <StatDuelGame />; }
+import { Suspense } from 'react';
+export default function Page() { return <Suspense><StatDuelGame /></Suspense>; }

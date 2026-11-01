@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { isDatabaseConfigured } from '@/lib/daily';
 import type { HopAttribute } from '@/lib/anilink';
+import { contentTypeFrom } from '@/lib/content-type';
 
 export const runtime = 'nodejs';
 export const revalidate = 0;
@@ -20,6 +21,8 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const animeId = searchParams.get('animeId');
+  const contentType = contentTypeFrom(searchParams.get('contentType'));
+  const poolWhere = contentType === 'MIXED' ? {} : { contentType };
 
   if (!animeId) {
     return NextResponse.json({ error: 'animeId is required.' }, { status: 400 });
@@ -60,7 +63,7 @@ export async function GET(request: NextRequest) {
     // Count per genre
     for (const genre of current.genres) {
       const count = await prisma.anime.count({
-        where: { genres: { has: genre }, id: { not: animeId } },
+        where: { genres: { has: genre }, id: { not: animeId }, ...poolWhere },
       });
       if (count > 0) genreCounts[genre] = count;
     }
@@ -68,7 +71,7 @@ export async function GET(request: NextRequest) {
     // Count per studio
     for (const studio of current.studios) {
       const count = await prisma.anime.count({
-        where: { studios: { has: studio }, id: { not: animeId } },
+        where: { studios: { has: studio }, id: { not: animeId }, ...poolWhere },
       });
       if (count > 0) studioCounts[studio] = count;
     }
@@ -78,7 +81,7 @@ export async function GET(request: NextRequest) {
 
     if (current.source) {
       const count = await prisma.anime.count({
-        where: { source: current.source, id: { not: animeId } },
+        where: { source: current.source, id: { not: animeId }, ...poolWhere },
       });
       if (count > 0) otherCounts.push({ type: 'source', value: current.source, count });
     }
@@ -86,21 +89,21 @@ export async function GET(request: NextRequest) {
     if (current.season && current.year) {
       const seasonYear = `${current.season} ${current.year}`;
       const count = await prisma.anime.count({
-        where: { season: current.season, year: current.year, id: { not: animeId } },
+        where: { season: current.season, year: current.year, id: { not: animeId }, ...poolWhere },
       });
       if (count > 0) otherCounts.push({ type: 'season_year', value: seasonYear, count });
     }
 
     if (current.author) {
       const count = await prisma.anime.count({
-        where: { author: current.author, id: { not: animeId } },
+        where: { author: current.author, id: { not: animeId }, ...poolWhere },
       });
       if (count > 0) otherCounts.push({ type: 'author', value: current.author, count });
     }
 
     if (current.publisher) {
       const count = await prisma.anime.count({
-        where: { publisher: current.publisher, id: { not: animeId } },
+        where: { publisher: current.publisher, id: { not: animeId }, ...poolWhere },
       });
       if (count > 0) otherCounts.push({ type: 'publisher', value: current.publisher, count });
     }
@@ -113,19 +116,19 @@ export async function GET(request: NextRequest) {
       ['source_title', current.sourceTitle, current.sourceTitle ? { sourceTitle: current.sourceTitle } : null],
     ] as const) {
       if (!where || !value) continue;
-      const count = await prisma.anime.count({ where: { ...where, id: { not: animeId } } });
+      const count = await prisma.anime.count({ where: { ...where, id: { not: animeId }, ...poolWhere } });
       if (count > 0) otherCounts.push({ type, value, count });
     }
 
     if (current.format) {
       const count = await prisma.anime.count({
-        where: { format: current.format, id: { not: animeId } },
+        where: { format: current.format, id: { not: animeId }, ...poolWhere },
       });
       if (count > 0) otherCounts.push({ type: 'format', value: current.format, count });
     }
 
     for (const title of [current.title, current.titleEnglish].filter((value): value is string => Boolean(value))) {
-      const count = await prisma.anime.count({ where: { sourceTitle: title, id: { not: animeId } } });
+      const count = await prisma.anime.count({ where: { sourceTitle: title, id: { not: animeId }, ...poolWhere } });
       if (count > 0) otherCounts.push({ type: 'source_title', value: title, count });
     }
 
